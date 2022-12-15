@@ -1,0 +1,68 @@
+---
+title: "DS330 Final"
+author: "Mustafa & Jakobs"
+date: "2022-12-15"
+output: html_document
+---
+
+#Soccer Player Data
+```{r include=FALSE}
+
+ggplotRegression <- function (fit) {
+
+require(ggplot2)
+
+ggplot(fit$model, aes_string(x = names(fit$model)[2], y = names(fit$model)[1])) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red") +
+  labs(title = paste("Adj R2 = ",signif(summary(fit)$adj.r.squared, 5),
+                     "Intercept =",signif(fit$coef[[1]],5 ),
+                     " Slope =",signif(fit$coef[[2]], 5),
+                     " P =",signif(summary(fit)$coef[2,4], 5)))
+}
+
+```
+```{r echo = T, results = 'hide'}
+# Load the necessary packages
+library(caret)
+library(ggplot2)
+library(readr)
+library(dplyr)
+# Load the csv file
+data <- read.csv("/Users/marvin/Desktop/2023 Classes/DS 330/final/england-premier-league-players-2018-to-2019-stats.csv")
+#remove non-quantitative & goal related stats.
+data <- data %>% select(-full_name,-birthday,-birthday_GMT,-league,-season,-position,-Current.Club,-nationality,-goals_per_90_overall,-goals_per_90_home,-goals_per_90_away,-goals_home,-goals_away,-goals_involved_per_90_overall,-min_per_goal_overall,-penalty_goals)
+# Fit a linear regression model with goals_overall as the response variable and the remaining columns as predictor variables
+fit <- lm(goals_overall ~ ., data = data)
+# Obtain the p-values for each predictor variable
+summary(fit)
+# Use stepwise selection to select the significant predictor variables
+fit_significant <- step(fit, direction = "both", scope = formula(fit), k = log(nrow(data)))
+# Obtain the names of the significant predictor variables
+significant_predictors <- names(fit_significant$coefficients)[-1]
+# Create a new dataset with only the significant predictor variables
+data_significant <- subset(data, select = significant_predictors)
+# Create a 80/20 split of the data into training and test sets
+set.seed(123)
+train_index <- createDataPartition(data$goals_overall, p = 0.8, list = FALSE)
+train_data <- data[train_index, ]
+test_data <- data[-train_index, ]
+set.seed(NULL)
+# Convert the character vector of significant predictor variables into a formula object
+significant_predictors_formula <- as.formula(paste("goals_overall ~", paste(significant_predictors, collapse = " + ")))
+```
+```{r}
+# Train a model on the training set using the significant predictor variables as input variables and goals_overall as the response variable
+model <- lm(significant_predictors_formula, data = train_data)
+# Make predictions on the test set using the trained model & round to whole goals
+predictions <- predict(model, test_data, type = "response")
+predictions <- lapply(predictions,round,0)
+# Evaluate the model's accuracy & print
+accuracy <- (mean(predictions == test_data$goals_overall))
+cat("The model is",accuracy*100,"% accurate at predicting exact overall goals with the following stats:\n")
+print(significant_predictors)
+```
+
+```{r}
+ggplotRegression(model)
+```
